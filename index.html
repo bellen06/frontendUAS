@@ -4,8 +4,22 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Produk</title>
+    <script>
+    (function () {
+      const path = window.location.pathname;
+      const lastPart = path.endsWith('/') ? 'index.html' : path.split('/').pop();
+      const isIndex = lastPart === 'index.html';
+
+      const token = localStorage.getItem('token');
+
+      if (isIndex && !token) {
+        alert('Silakan login terlebih dahulu');
+        window.location.replace('login.html');
+      }
+    })();
+  </script>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://rifkira.psl17.my.id/js/app.js"></script>
+  <script src="https://rifkira.psl17.my.id/js/app.js" defer></script>
   <style>
     body {
       font-family: 'Poppins', sans-serif;
@@ -36,7 +50,7 @@
       <h1 class="text-3xl font-bold text-rose-600">🌸 Punya Rahma</h1>
       <div class="flex gap-4">
         <button onclick="openModal('addModal')" class="bg-rose-500 text-white px-5 py-2 rounded-full font-semibold hover:bg-rose-600 transition">+ Tambah Produk</button>
-        <a href="login.html" class="bg-rose-100 hover:bg-rose-200 text-rose-600 px-4 py-1 rounded-full font-semibold transition">Logout</a>
+        <a onclick="logout()" class="bg-rose-100 hover:bg-rose-200 text-rose-600 px-4 py-1 rounded-full font-semibold transition">Logout</a>
       </div>
     </div>
   </header>
