@@ -88,8 +88,8 @@
   const email = localStorage.getItem('email');
 
   let totalItem = 0;
-  let userName = 'Pelanggan';
-  let userEmail = '-';
+  let userName = localStorage.getItem('name') || 'Pelanggan';
+  let userEmail = localStorage.getItem('email') || '-';
 
   // Cek login dan admin
   if (!token) {
@@ -106,7 +106,7 @@
   const subtotalContainer = document.getElementById('subtotalContainer');
   const checkoutBtn = document.getElementById('checkoutBtn');
 
-  // ✅ Ambil nama & email user
+  // ✅ Ambil nama & email user dari API
   async function loadUser() {
     try {
       const res = await fetch(`${API_URL}/users/me`, {
@@ -114,10 +114,17 @@
           Authorization: 'Bearer ' + token
         }
       });
+
       const data = await res.json();
-      if (data) {
+      console.log('Data user dari API:', data);
+
+      if (res.ok && data) {
         userName = data.name || userName;
         userEmail = data.email || userEmail;
+        localStorage.setItem('name', userName); // Simpan ke localStorage
+        localStorage.setItem('email', userEmail);
+      } else {
+        console.warn('Data user tidak valid:', data);
       }
     } catch (err) {
       console.warn('Gagal mengambil data user:', err.message);
@@ -127,6 +134,8 @@
   async function loadKeranjang() {
     try {
       await loadUser(); // 🔁 Pastikan nama user tersedia sebelum buat pesan WA
+
+      console.log('User info:', userName, userEmail); // Debug
 
       const res = await fetch(`${API_URL}/cart`, {
         headers: {
@@ -182,7 +191,8 @@
       subtotalContainer.classList.remove('hidden');
       subtotalAmount.textContent = 'Rp' + total.toLocaleString('id-ID');
       pesanWA += `\nTotal: Rp${total.toLocaleString('id-ID')}`;
-      checkoutBtn.href = `https://wa.me/6285714758408?text=${encodeURIComponent(pesanWA)}`;
+      console.log('Pesan WA:', pesanWA); // Debug
+      checkoutBtn.href = `https://wa.me/6281234567890?text=${encodeURIComponent(pesanWA)}`;
 
       updateHeader();
     } catch (err) {
@@ -224,6 +234,7 @@
   function logout() {
     localStorage.removeItem('token');
     localStorage.removeItem('email');
+    localStorage.removeItem('name');
     alert('Anda telah logout.');
     window.location.href = 'login.html';
   }
@@ -246,7 +257,6 @@
 
   document.addEventListener('DOMContentLoaded', loadKeranjang);
 </script>
-
 
 </body>
 </html>
