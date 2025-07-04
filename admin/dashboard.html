@@ -122,211 +122,194 @@
 
 <script>
   const API_URL = 'https://rifkira.psl17.my.id/api';
+  const header = document.getElementById('mainHeader');
   const token = localStorage.getItem('token');
   const email = localStorage.getItem('email');
 
-  if (!token || email !== 'admin@mail.com') {
-    alert("Akses ditolak. Login sebagai admin.");
-    window.location.href = '../login.html';
+  let totalItem = 0;
+  let userName = localStorage.getItem('name') || 'Pelanggan';
+  let userEmail = localStorage.getItem('email') || '-';
+
+  // Redirect jika belum login
+  if (!token) {
+    alert('Silakan login terlebih dahulu!');
+    window.location.href = 'login.html';
   }
 
-  const produkList = document.getElementById('produkList');
+  if (email === 'admin@mail.com') {
+    window.location.href = 'admin/dashboard.html';
+  }
 
-  async function loadProduk() {
+  const cartContainer = document.getElementById('cartContainer');
+  const subtotalAmount = document.getElementById('subtotalAmount');
+  const subtotalContainer = document.getElementById('subtotalContainer');
+  const checkoutBtn = document.getElementById('checkoutBtn');
+
+  async function loadUser() {
     try {
-      const res = await fetch(`${API_URL}/products`, {
+      const res = await fetch(`${API_URL}/users/me`, {
         headers: { Authorization: 'Bearer ' + token }
       });
+
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        const text = await res.text();
+        throw new Error('Respon bukan JSON:\n' + text.slice(0, 80));
+      }
+
       const data = await res.json();
+      if (res.ok) {
+        userName = data.name || userName;
+        userEmail = data.email || userEmail;
+        localStorage.setItem('name', userName);
+        localStorage.setItem('email', userEmail);
+      } else {
+        console.warn('Data user tidak valid:', data);
+      }
+    } catch (err) {
+      console.warn('Gagal mengambil data user:', err.message);
+    }
+  }
+
+  async function loadKeranjang() {
+    try {
+      await loadUser();
+
+      const res = await fetch(`${API_URL}/cart`, {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        const text = await res.text();
+        throw new Error('Respon bukan JSON:\n' + text.slice(0, 80));
+      }
+
+      const data = await res.json();
+      totalItem = 0;
 
       if (!Array.isArray(data) || data.length === 0) {
-        produkList.innerHTML = `<p class="text-gray-500 text-center col-span-full">Belum ada produk.</p>`;
+        cartContainer.innerHTML = '<p class="text-center text-gray-500">Keranjang kamu kosong.</p>';
+        subtotalContainer.classList.add('hidden');
+        updateHeader();
         return;
       }
 
-      produkList.innerHTML = data.map(p => {
-        const img = p.image_url ? API_URL.replace('/api', '') + p.image_url : 'https://via.placeholder.com/300';
-        const minPrice = p.variants?.length ? Math.min(...p.variants.map(v => v.price)) : 0;
+      let total = 0;
+      let pesanWA = `Halo, saya *${userName}* (email: ${userEmail}) ingin memesan:\n`;
+
+      cartContainer.innerHTML = data.map(item => {
+        const harga = item.price;
+        const subtotal = harga * item.qty;
+        total += subtotal;
+        totalItem += item.qty;
+
+        pesanWA += `- ${item.name} (${item.qty}x) - Rp${subtotal.toLocaleString('id-ID')}\n`;
+
         return `
-          <div class="bg-white/80 p-4 rounded-xl shadow hover:shadow-lg transition-all duration-300 flex flex-col">
-            <img src="${img}" alt="${p.name}" class="rounded-xl mb-3 w-full h-48 object-cover" />
-            <div class="flex-1">
-              <h4 class="font-bold text-lg text-rose-700">${p.name}</h4>
-              <p class="text-sm text-gray-600 mb-1">${p.description || ''}</p>
-              <span class="inline-block text-xs bg-rose-100 text-rose-600 px-2 py-0.5 rounded-full mb-2">${p.category || 'Tanpa Kategori'}</span>
-              <p class="text-sm text-gray-700">Harga mulai: <span class="font-semibold text-rose-700">Rp${minPrice.toLocaleString('id-ID')}</span></p>
+          <div class="bg-white p-4 rounded-xl shadow-md flex flex-col md:flex-row gap-4 items-center">
+            <img src="${item.image_url ? API_URL.replace('/api', '') + item.image_url : 'https://via.placeholder.com/150'}"
+              class="w-28 h-28 object-cover rounded-xl border" alt="${item.name}" />
+            <div class="flex-1 w-full">
+              <h3 class="text-lg font-semibold text-rose-800">${item.name}</h3>
+              <p class="text-sm text-gray-600">Kategori: ${item.category || '-'}</p>
+              <p class="text-sm text-gray-600">Ukuran: ${item.size || '-'}</p>
+              <p class="text-sm mt-1">Harga Satuan: <span class="text-rose-700 font-medium">Rp${harga.toLocaleString('id-ID')}</span></p>
+              <div class="flex items-center gap-2 mt-2">
+                <label class="text-sm">Jumlah:</label>
+                <input type="number" min="1" value="${item.qty}" class="qty-input border border-pink-300 px-2 py-1 rounded w-16 text-center"
+                  onchange="updateQty(${item.id}, this.value)" />
+              </div>
             </div>
-            <div class="flex justify-between gap-2 mt-4">
-              <button onclick="detailProduk(${p.id})" class="bg-blue-400 hover:bg-blue-500 text-white px-4 py-1 rounded-full text-sm">Detail</button>
-              <button onclick="editProduk(${p.id})" class="bg-yellow-400 hover:bg-yellow-500 text-white px-4 py-1 rounded-full text-sm">Edit</button>
-              <button onclick="hapusProduk(${p.id})" class="bg-red-400 hover:bg-red-500 text-white px-4 py-1 rounded-full text-sm">Hapus</button>
+            <div class="text-right">
+              <p class="text-md font-bold text-rose-600">Subtotal:<br>Rp${subtotal.toLocaleString('id-ID')}</p>
+              <button onclick="hapusItem(${item.id})"
+                      class="mt-2 bg-red-400 hover:bg-red-500 text-white px-4 py-1 text-sm rounded-full">Hapus</button>
             </div>
           </div>
         `;
       }).join('');
+
+      subtotalContainer.classList.remove('hidden');
+      subtotalAmount.textContent = 'Rp' + total.toLocaleString('id-ID');
+      pesanWA += `\nTotal: Rp${total.toLocaleString('id-ID')}`;
+      checkoutBtn.href = `https://wa.me/6281234567890?text=${encodeURIComponent(pesanWA)}`;
+
+      updateHeader();
     } catch (err) {
-      produkList.innerHTML = `<p class="text-red-500">Gagal memuat produk: ${err.message}</p>`;
+      cartContainer.innerHTML = `<p class="text-red-500">Gagal memuat keranjang: ${err.message}</p>`;
     }
   }
 
-  document.getElementById('addProductForm').addEventListener('submit', async function (e) {
-    e.preventDefault();
-    const form = e.target;
-    const formData = new FormData(form);
-    const responseBox = document.getElementById('addProductResponse');
-
+  async function hapusItem(id) {
+    if (!confirm('Yakin ingin menghapus item ini?')) return;
     try {
-      const res = await fetch(`${API_URL}/products`, {
-        method: 'POST',
-        headers: { Authorization: 'Bearer ' + token },
-        body: formData
-      });
-
-      const result = await res.json();
-      responseBox.textContent = res.ok ? '✅ Produk berhasil ditambahkan' : (result.error || '❌ Gagal tambah produk');
-
-      if (res.ok) {
-        closeModal('addModal');
-        loadProduk();
-        form.reset();
-      }
-    } catch (err) {
-      responseBox.textContent = '❌ Gagal: ' + err.message;
-    }
-  });
-
-  async function hapusProduk(id) {
-    if (!confirm('Yakin ingin menghapus produk ini?')) return;
-    try {
-      const res = await fetch(`${API_URL}/products/${id}`, {
+      const res = await fetch(`${API_URL}/cart/${id}`, {
         method: 'DELETE',
         headers: { Authorization: 'Bearer ' + token }
       });
-
-      if (!res.ok) {
-        const data = await res.json();
-        alert(data.error || 'Gagal menghapus produk.');
-      } else {
-        loadProduk();
-      }
+      await loadKeranjang();
     } catch (err) {
-      alert('Gagal menghapus: ' + err.message);
+      alert('Gagal menghapus item: ' + err.message);
     }
   }
+
+async function updateQty(id, qty) {
+  try {
+    const res = await fetch(`${API_URL}/cart/${id}`, {
+      method: 'PUT',
+      headers: {
+        Authorization: 'Bearer ' + token,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ qty: parseInt(qty) })
+    });
+
+    const contentType = res.headers.get("content-type") || "";
+
+    if (!res.ok) {
+      if (contentType.includes("application/json")) {
+        const errData = await res.json();
+        throw new Error(errData.message || "Gagal update qty.");
+      } else {
+        const text = await res.text();
+        throw new Error("Respon bukan JSON: " + text.slice(0, 100));
+      }
+    }
+
+    await loadKeranjang();
+  } catch (err) {
+    alert("❌ Gagal memperbarui jumlah: " + err.message);
+  }
+}
 
   function logout() {
     localStorage.removeItem('token');
     localStorage.removeItem('email');
-    window.location.href = '../index.html';
+    localStorage.removeItem('name');
+    alert('Anda telah logout.');
+    window.location.href = 'login.html';
   }
 
-  function openModal(id) {
-    document.getElementById(id).classList.remove('hidden');
-    document.getElementById(id).classList.add('flex');
+  function updateHeader() {
+    header.innerHTML = `
+      <h1 class="text-2xl font-bold text-rose-700">Bellenshop</h1>
+      <nav class="flex gap-4 text-rose-600 font-medium items-center relative">
+        <a href="index.html" class="nav-hover">Home</a>
+        <a href="keranjang.html" class="nav-hover relative">
+          Keranjang
+          <span class="absolute -top-2 -right-3 bg-pink-500 text-white text-xs px-2 py-0.5 rounded-full">${totalItem}</span>
+        </a>
+        <a href="wishlist.html" class="nav-hover">Favorit</a>
+        <a href="tentang.html" class="nav-hover">Tentang</a>
+        <button onclick="logout()" class="nav-hover text-red-500">Logout</button>
+      </nav>
+    `;
   }
 
-  function closeModal(id) {
-    document.getElementById(id).classList.remove('flex');
-    document.getElementById(id).classList.add('hidden');
-  }
-
-  document.addEventListener('DOMContentLoaded', loadProduk);
-
-  // Placeholder fungsi detail/edit jika belum dibuat
-  function detailProduk(id) {
-    alert('Fitur detail belum diimplementasikan (produk id: ' + id + ')');
-  }
-
-  function editProduk(id) {
-    alert('Fitur edit belum diimplementasikan (produk id: ' + id + ')');
-  }
+  document.addEventListener('DOMContentLoaded', loadKeranjang);
 </script>
 
-<script>
-  async function editProduk(id) {
-    try {
-      const res = await fetch(`${API_URL}/products/${id}`, {
-        headers: { Authorization: 'Bearer ' + token }
-      });
-      const p = await res.json();
-
-      const variant = Array.isArray(p.variants) && p.variants.length > 0 ? p.variants[0] : null;
-
-      document.getElementById('editId').value = p.id;
-      document.getElementById('editName').value = p.name || '';
-      document.getElementById('editDescription').value = p.description || '';
-      document.getElementById('editPrice').value = variant?.price || '';
-      document.getElementById('editSize').value = variant?.size || '';
-      document.getElementById('editColor').value = variant?.color || '';
-      document.getElementById('editCategory').value = p.category || '';
-      document.getElementById('editImage').value = '';
-
-      document.getElementById('editProductResponse').textContent = '';
-      openModal('editModal');
-    } catch (err) {
-      alert('❌ Gagal memuat data produk: ' + err.message);
-    }
-  }
-
-  document.getElementById('editProductForm').addEventListener('submit', async function (e) {
-    e.preventDefault();
-
-    const form = e.target;
-    const id = document.getElementById('editId').value;
-    const responseEl = document.getElementById('editProductResponse');
-    const formData = new FormData();
-
-    // Kirim data ke produk utama
-    formData.append('name', document.getElementById('editName').value);
-    formData.append('description', document.getElementById('editDescription').value);
-    formData.append('category', document.getElementById('editCategory').value);
-
-    const imageFile = document.getElementById('editImage').files[0];
-    if (imageFile) {
-      formData.append('image', imageFile);
-    }
-
-    try {
-      const res = await fetch(`${API_URL}/products/${id}`, {
-        method: 'POST', // Bisa juga PUT tergantung API kamu
-        headers: { Authorization: 'Bearer ' + token },
-        body: formData
-      });
-
-      const result = await res.json();
-
-      if (!res.ok) {
-        responseEl.textContent = result.error || '❌ Gagal update produk.';
-        return;
-      }
-
-      // Tambahkan update varian (jika API mendukung endpoint /variants/{id})
-      const variantPayload = {
-        size: document.getElementById('editSize').value,
-        color: document.getElementById('editColor').value,
-        price: parseInt(document.getElementById('editPrice').value),
-      };
-
-      // Ambil ID varian (harus disediakan jika edit spesifik varian)
-      if (result.variant_id) {
-        await fetch(`${API_URL}/product_variants/${result.variant_id}`, {
-          method: 'PUT',
-          headers: {
-            Authorization: 'Bearer ' + token,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(variantPayload)
-        });
-      }
-
-      responseEl.textContent = '✅ Produk berhasil diperbarui';
-      closeModal('editModal');
-      loadProduk();
-    } catch (err) {
-      responseEl.textContent = '❌ Error: ' + err.message;
-    }
-  });
-</script>
 
 
 
