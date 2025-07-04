@@ -65,19 +65,21 @@
     <div class="bg-white rounded-xl p-6 max-w-xl w-full relative animate-fade">
       <button onclick="closeModal('addModal')" class="absolute top-2 right-2 text-rose-500 font-bold">&times;</button>
       <h3 class="text-lg font-semibold text-rose-700 mb-4">Tambah Produk</h3>
-      <form id="addProductForm" class="space-y-4">
-        <input type="text" name="name" placeholder="Nama Produk" class="w-full p-3 rounded-lg shadow border" required>
-        <textarea name="description" placeholder="Deskripsi" class="w-full p-3 rounded-lg shadow border" required></textarea>
-        <input type="number" name="price" placeholder="Harga" class="w-full p-3 rounded-lg shadow border" required>
-        <input type="text" name="size" placeholder="Ukuran" class="w-full p-3 rounded-lg shadow border">
-        <input type="text" name="color" placeholder="Warna" class="w-full p-3 rounded-lg shadow border">
-        <input type="text" name="category" placeholder="Kategori" class="w-full p-3 rounded-lg shadow border">
-        <input type="file" name="image" class="w-full p-3 rounded-lg shadow border">
-        <div id="addProductResponse" class="text-sm text-rose-500"></div>
-        <button type="submit" class="bg-pink-500 hover:bg-pink-600 text-white px-6 py-3 rounded-full font-semibold shadow-lg btn-hover">
-          Simpan Produk
-        </button>
-      </form>
+<form id="addProductForm" class="space-y-4">
+  <input type="text" name="name" placeholder="Nama Produk" class="w-full p-3 rounded-lg shadow border" required>
+  <textarea name="description" placeholder="Deskripsi" class="w-full p-3 rounded-lg shadow border" required></textarea>
+  <input type="number" name="price" placeholder="Harga" class="w-full p-3 rounded-lg shadow border" required>
+  <input type="text" name="size" placeholder="Ukuran" class="w-full p-3 rounded-lg shadow border" required>
+  <input type="number" name="stok" placeholder="Stok" class="w-full p-3 rounded-lg shadow border" required>
+  <input type="text" name="color" placeholder="Warna" class="w-full p-3 rounded-lg shadow border" required>
+  <input type="text" name="category" placeholder="Kategori" class="w-full p-3 rounded-lg shadow border">
+  <input type="file" name="image" class="w-full p-3 rounded-lg shadow border">
+  <div id="addProductResponse" class="text-sm text-rose-500"></div>
+  <button type="submit" class="bg-pink-500 hover:bg-pink-600 text-white px-6 py-3 rounded-full font-semibold shadow-lg btn-hover">
+    Simpan Produk
+  </button>
+</form>
+
     </div>
   </div>
 
@@ -92,6 +94,7 @@
       <textarea name="description" id="editDescription" placeholder="Deskripsi" class="w-full p-3 rounded-lg shadow border" required></textarea>
       <input type="number" name="price" id="editPrice" placeholder="Harga" class="w-full p-3 rounded-lg shadow border" required>
       <input type="text" name="size" id="editSize" placeholder="Ukuran" class="w-full p-3 rounded-lg shadow border">
+      <input type="number" name="stok" placeholder="Stok" class="w-full p-3 rounded-lg shadow border" required>
       <input type="text" name="color" id="editColor" placeholder="Warna" class="w-full p-3 rounded-lg shadow border">
       <input type="text" name="category" id="editCategory" placeholder="Kategori" class="w-full p-3 rounded-lg shadow border">
       <input type="file" name="image" id="editImage" class="w-full p-3 rounded-lg shadow border">
@@ -169,29 +172,66 @@
     }
   }
 
-  document.getElementById('addProductForm').addEventListener('submit', async function (e) {
+ document.getElementById('addProductForm').addEventListener('submit', async function (e) {
     e.preventDefault();
     const form = e.target;
-    const formData = new FormData(form);
-    const responseBox = document.getElementById('addProductResponse');
+    const responseEl = document.getElementById('addProductResponse');
+    responseEl.textContent = '';
+
+    // Ambil nilai input
+    const name = form.name.value.trim();
+    const description = form.description.value.trim();
+    const price = form.price.value.trim();
+    const size = form.size.value.trim();
+    const color = form.color.value.trim();
+    const stok = form.stok.value.trim();
+    const category = form.category.value.trim();
+    const image = form.image.files[0];
+
+    // Validasi input wajib
+    if (!name || !price || !size || !color || !stok) {
+      responseEl.textContent = '❌ Nama dan varian produk wajib diisi';
+      return;
+    }
+
+    if (isNaN(price) || price <= 0 || isNaN(stok) || stok < 0) {
+      responseEl.textContent = '❌ Harga dan stok harus berupa angka valid';
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('name', name);
+    formData.append('description', description);
+    formData.append('category', category);
+    if (image) formData.append('image', image);
+
+    // Struktur varian: variants[0][field]
+    formData.append('variants[0][price]', price);
+    formData.append('variants[0][stok]', stok);
+    formData.append('variants[0][size]', size);
+    formData.append('variants[0][color]', color);
 
     try {
       const res = await fetch(`${API_URL}/products`, {
         method: 'POST',
-        headers: { Authorization: 'Bearer ' + token },
+        headers: {
+          Authorization: 'Bearer ' + token
+        },
         body: formData
       });
 
       const result = await res.json();
-      responseBox.textContent = res.ok ? '✅ Produk berhasil ditambahkan' : (result.error || '❌ Gagal tambah produk');
 
       if (res.ok) {
-        closeModal('addModal');
-        loadProduk();
+        responseEl.textContent = '✅ Produk berhasil ditambahkan';
         form.reset();
+        closeModal('addModal');
+        if (typeof loadProduk === 'function') loadProduk();
+      } else {
+        responseEl.textContent = '❌ ' + (result.message || result.error || 'Gagal menambahkan produk');
       }
     } catch (err) {
-      responseBox.textContent = '❌ Gagal: ' + err.message;
+      responseEl.textContent = '❌ Gagal mengirim data: ' + err.message;
     }
   });
 
@@ -242,11 +282,19 @@
   }
 </script>
 <script>
+  // Fungsi untuk membuka modal edit dan mengisi data
   async function editProduk(id) {
     try {
       const res = await fetch(`${API_URL}/products/${id}`, {
         headers: { Authorization: 'Bearer ' + token }
       });
+
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await res.text();
+        throw new Error("Respon bukan JSON: " + text.slice(0, 100));
+      }
+
       const p = await res.json();
 
       // Isi data produk
@@ -255,11 +303,11 @@
       document.getElementById('editDescription').value = p.description || '';
       document.getElementById('editCategory').value = p.category || '';
 
-      // Jika produk punya varian, ambil yang pertama
-      const variant = p.variants && p.variants.length > 0 ? p.variants[0] : null;
+      const variant = Array.isArray(p.variants) && p.variants.length > 0 ? p.variants[0] : null;
       document.getElementById('editPrice').value = variant?.price || '';
       document.getElementById('editSize').value = variant?.size || '';
       document.getElementById('editColor').value = variant?.color || '';
+      document.querySelector('#editProductForm [name="stok"]').value = variant?.stok || '';
 
       openModal('editModal');
     } catch (err) {
@@ -267,42 +315,86 @@
     }
   }
 
-  document.getElementById('editProductForm').addEventListener('submit', async function (e) {
-    e.preventDefault();
-    const form = e.target;
-    const id = document.getElementById('editId').value;
-    const formData = new FormData(form);
+  // Submit form edit produk (dengan struktur variants[0])
+document.getElementById('editProductForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const id = document.getElementById('editId').value;
+  const form = e.target;
+  const responseEl = document.getElementById('editProductResponse');
+  responseEl.textContent = '';
 
-    try {
-      const res = await fetch(`${API_URL}/products/${id}`, {
-        method: 'PUT',
-        headers: { Authorization: 'Bearer ' + token },
-        body: formData
-      });
-      const result = await res.json();
+  // Validasi sederhana
+  const name = form.name.value.trim();
+  const price = form.price.value.trim();
+  const size = form.size.value.trim();
+  const color = form.color.value.trim();
+  const stok = form.stok.value.trim();
 
-      const responseEl = document.getElementById('editProductResponse');
-      responseEl.textContent = res.ok ? '✅ Produk berhasil diupdate' : (result.error || '❌ Gagal update produk');
+  if (!name || !price || !size || !color || !stok) {
+    responseEl.textContent = '❌ Nama dan varian produk wajib diisi';
+    return;
+  }
+  if (isNaN(price) || price <= 0 || isNaN(stok) || stok < 0) {
+    responseEl.textContent = '❌ Harga dan stok harus angka valid';
+    return;
+  }
 
-      if (res.ok) {
-        closeModal('editModal');
-        loadProduk();
-      }
-    } catch (err) {
-      document.getElementById('editProductResponse').textContent = '❌ Gagal: ' + err.message;
+  const formData = new FormData();
+  formData.append('name', name);
+  formData.append('description', form.description.value.trim());
+  formData.append('category', form.category.value.trim());
+  if (form.image.files[0]) formData.append('image', form.image.files[0]);
+
+  formData.append('variants[0][price]', price);
+  formData.append('variants[0][stok]', stok);
+  formData.append('variants[0][size]', size);
+  formData.append('variants[0][color]', color);
+
+  try {
+    const res = await fetch(`${API_URL}/products/${id}`, {
+      method: 'PUT',  // atau POST jika backend pakai POST untuk update
+      headers: { Authorization: 'Bearer ' + token },
+      body: formData
+    });
+
+    console.log('Status:', res.status);
+    const text = await res.text();
+    console.log('Response text:', text);
+
+    let result = null;
+    try { result = JSON.parse(text); } catch {}
+    
+    if (!res.ok) {
+      responseEl.textContent = '❌ Gagal update: ' + 
+        (result?.message || result?.error || text.slice(0, 100));
+      return;
     }
-  });
 
+    responseEl.textContent = '✅ Produk berhasil diupdate';
+    closeModal('editModal');
+    loadProduk();
+  } catch (err) {
+    responseEl.textContent = '❌ Error jaringan: ' + err.message;
+  }
+});
+
+  // Fungsi detail produk
   async function detailProduk(id) {
     try {
       const res = await fetch(`${API_URL}/products/${id}`, {
         headers: { Authorization: 'Bearer ' + token }
       });
+
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await res.text();
+        throw new Error("Respon bukan JSON: " + text.slice(0, 100));
+      }
+
       const p = await res.json();
+      const variant = Array.isArray(p.variants) && p.variants.length > 0 ? p.variants[0] : null;
 
-      const variant = p.variants && p.variants.length > 0 ? p.variants[0] : null;
       const detailContent = document.getElementById('detailContent');
-
       detailContent.innerHTML = `
         <img src="${p.image_url ? API_URL.replace('/api', '') + p.image_url : 'https://via.placeholder.com/400'}" 
              class="w-full rounded-xl mb-4" alt="${p.name}" />
@@ -312,6 +404,7 @@
         <p><strong>Harga:</strong> Rp${variant?.price ? Number(variant.price).toLocaleString('id-ID') : '-'}</p>
         <p><strong>Ukuran:</strong> ${variant?.size || '-'}</p>
         <p><strong>Warna:</strong> ${variant?.color || '-'}</p>
+        <p><strong>Stok:</strong> ${variant?.stok || '-'}</p>
       `;
 
       openModal('detailModal');
@@ -320,6 +413,8 @@
     }
   }
 </script>
+
+
 
 
 
